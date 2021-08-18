@@ -1,0 +1,166 @@
+model Sudoku_IP_rv
+uses "mmxprs", "mmsystem", "mmsheet"
+
+FILE:= "Sudoku17.dat"
+EXCEL:= "Result.xlsx"
+RANGES:= '[Running_time_2$EN2:EO'
+RANGES_AVE:= '[Running_time_2$EO10003]'
+
+! Initialize n
+declarations
+  n: integer
+end-declarations
+
+initializations from FILE
+    n
+end-initializations
+
+N:= integer(n^2)
+
+! Initialize other arrays
+declarations
+  rows = 1..N
+  columns = 1..N
+  numbers = 1..N
+  rblock = 0..integer(n - 1)
+  cblock = 0..integer(n - 1)
+  sudoku: dynamic array(rows, columns) of integer ! use dynamic array to read sparse array
+  cells: array(rows, columns, numbers) of mpvar
+  names: set of string
+  clues: dynamic array(rows, columns, numbers) of integer
+  row_con: array(rows, numbers) of linctr
+  col_con: array(columns, numbers) of linctr
+  block_con: array(rblock, rblock, numbers) of linctr
+  cell_con: dynamic array(rows, columns) of linctr
+  itrs = 1..100
+end-declarations
+
+! initialisations from FILE
+!   names
+! end-initialisations
+
+declarations
+  ! times: array(names) of real
+  times: array(itrs) of real
+end-declarations
+
+!! Constraints
+! Domains of decision varoables
+forall(i in rows, j in columns, k in numbers) cells(i, j, k) is_binary
+
+! forall(name in names) do
+forall(R in itrs) do
+  name:= 'Sudoku_' + string(R)
+  writeln(name)
+  
+  ! Read sudoku from file
+  reset(sudoku)
+  initializations from FILE
+      sudoku as name
+  end-initializations
+
+  ! forall(i in rows, j in columns, k in numbers) clues(i, j, k):= 0
+  reset(clues)
+  forall(i in rows, j in columns) do
+    if(exists(sudoku(i, j))) then
+      clues(i, j, sudoku(i, j)):= 1
+    end-if
+  end-do
+
+  forall(i in rows, k in numbers) row_con(i, k):= cells(1, 1, 1) is_binary
+  forall(j in columns, k in numbers) col_con(j, k):= cells(1, 1, 1) is_binary
+  forall(l in cblock, m in rblock, k in numbers) block_con(l, m, k):= cells(1, 1, 1) is_binary
+  forall (i in rows, j in columns) cell_con(i, j):= cells(1, 1, 1) is_binary
+
+  ! ! Print out the original sudoku matrix
+  ! writeln("##################### ORIGINAL #####################")
+  ! forall(i in rows) do
+  !   forall(j in columns) do
+  !     write(sudoku(i, j))
+  !     write(" ")
+  !   end-do
+  !   writeln("")
+  ! end-do
+  ! writeln("####################################################")
+
+  !! Constraints
+  ! Rows
+  forall (i in rows, k in numbers) row_con(i, k):= sum(j in columns | not exists(sudoku(i, j))) cells(i, j, k) = 1 - sum(j in columns) clues(i, j, k)
+
+  ! Columns
+  forall (j in columns, k in numbers) col_con(j, k):= sum(i in rows | not exists(sudoku(i, j))) cells(i, j, k) = 1 - sum(i in rows) clues(i, j, k)
+
+  ! Each cell has one number
+  forall (i in rows, j in columns | not exists(sudoku(i, j))) cell_con(i, j):= sum(k in numbers) cells(i, j, k) = 1
+
+  ! Blocks
+  forall(l in cblock, m in rblock, k in numbers) block_con(l, m, k):= sum(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n) | not exists(sudoku(i, j))) cells(i, j, k) = 1 - sum(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n)) clues(i, j, k)
+
+  ! if(name = names(1)) then
+  if(R = 1) then
+  minimize(0)
+  end-if
+
+  starttime:= gettime ! Get start time
+
+  ! Objective function = 0
+  ! setparam("XPRS_VERBOSE", true) ! Uncomment to get detailed MIP output
+  minimize(0)
+
+  ! Print out whether the program was solved
+  if (getprobstat = XPRS_OPT) then
+    writeln("Solved.")
+  else
+    writeln("Not solved to optimality. DO NOT TRUST RESULTS!")
+  end-if
+
+  t:= gettime - starttime
+
+  ! times(name):= t
+  times(R):= t
+  writeln("Time: ", t) ! Print the time used
+
+  ! ! Print out the result matrix
+  ! writeln("##################### SOLUTION #####################")
+  ! forall(i in rows) do
+  !   forall(j in columns) do
+  !     if(exists(sudoku(i, j))) then
+  !       write(sudoku(i, j))
+  !       write(" ")
+  !     else
+  !       forall(k in numbers | getsol(cells(i, j, k)) > 0) do
+  !         write(k)
+  !         write(" ")
+  !       end-do
+  !     end-if
+  !   end-do
+  !   writeln("")
+  ! end-do
+  ! writeln("####################################################")
+
+  ! ! Output the result into a data file
+  ! fopen("Solution.dat",F_OUTPUT)
+  !   writeln('n: ', n)
+  !   write('solution: [')
+  !   forall(i in rows) do
+  !     forall(j in columns, k in numbers | getsol(cells(i, j, k)) > 0) do
+  !       write(k)
+  !       write(" ")
+  !     end-do
+  !     writeln("")
+  !   end-do
+  !   write(']')
+  ! fclose(F_OUTPUT)
+end-do
+
+writeln(times)
+! ave_time:= (sum(name in names) times(name))/times.size
+ave_time:= (sum(R in itrs) times(R))/times.size
+writeln(ave_time)
+
+! Write result to excel
+initializations to "mmsheet.excel:" + EXCEL
+  times as RANGES + string(times.size + 1) + ']' ave_time as RANGES_AVE
+end-initializations
+
+end-model

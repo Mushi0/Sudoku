@@ -1,0 +1,110 @@
+model Generator
+
+Itr:= 500
+FILE:= "Sudoku_5.dat"
+FILE_OUT:= "Sudoku_5_Pattern.dat"
+
+! Initialize
+declarations
+  n = 5
+  N = integer(n^2)
+  rows = 1..N
+  columns = 1..N
+  numbers = 1..N
+  number_set: array(numbers) of integer
+  sudoku: array(rows, columns) of integer
+  new_sudoku: array(rows, columns) of integer
+  transpose: array(numbers) of integer
+  itrs = 1..Itr
+  counts: array(itrs) of integer
+  sudoku_pattern: dynamic array(itrs, rows, columns) of integer
+end-declarations
+
+! Initiate the file
+fopen(FILE_OUT,F_OUTPUT)
+  writeln('n: ', n)
+fclose(F_OUTPUT)
+
+T:= 1
+counts(1):= 0
+
+forall(R in itrs) do
+  ! Read Sudoku matrix
+  name:= "sudoku_" + R
+  initialisations from FILE
+    sudoku as name
+  end-initialisations
+
+  ! transform the sudoku matrix to different patterns
+  forall(j in columns) do
+    transpose(sudoku(1, j)):= j
+  end-do
+  forall(i in rows, j in columns) do
+    new_sudoku(i, j):= transpose(sudoku(i, j))
+  end-do
+
+  ! Print out the pattern
+  writeln("##################### PATTERN #####################")
+  forall(i in rows) do
+    forall(j in columns) do
+      write(new_sudoku(i, j))
+      write(" ")
+    end-do
+    writeln("")
+  end-do
+  writeln("####################################################")
+
+  ! Whether the grid has already been generated before
+  forall(t in itrs) do
+    equal:= true
+    forall(i in rows, j in columns) do
+      if(sudoku_pattern(t, i, j) <> new_sudoku(i, j)) then
+        equal:= false
+      end-if
+    end-do
+    if equal then
+      writeln("Matrix already exists. ")
+
+      if(R > 1) then
+        counts(R):= counts(R - 1)
+      end-if
+
+      break
+    end-if
+  end-do
+  if not equal then
+    writeln("New matrix")
+
+    if(R = 1) then
+      counts(1):= 1
+    else
+      counts(R):= counts(R - 1) + 1
+    end-if
+
+    forall(i in rows, j in columns) sudoku_pattern(R, i, j):= new_sudoku(i, j)
+
+    name:= 'sudoku_' + R
+    ! Output the result into data file
+    fopen(FILE_OUT,F_OUTPUT+F_APPEND)
+      write(name, ': [')
+      forall(i in rows) do
+        forall(j in columns) do
+          write(new_sudoku(i, j))
+          write(" ")
+        end-do
+        writeln("")
+      end-do
+      writeln(']')
+      writeln('')
+    fclose(F_OUTPUT)
+
+    T += 1
+  end-if
+end-do
+T -= 1
+
+writeln("Number of matrices generated: ", T)
+writeln("Percentage: ", T/Itr*100, "%")
+writeln("Counts: ", counts)
+
+end-model

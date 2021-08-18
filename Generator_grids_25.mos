@@ -1,0 +1,137 @@
+model Generator_grids_25
+uses "mmxprs", "mmsystem", "python3"
+
+! Initialize
+declarations
+  n = 5
+  N = integer(n^2)
+  rows = 1..N
+  columns = 1..N
+  numbers = 1..N
+  rblock = 0..integer(n - 1)
+  cblock = 0..integer(n - 1)
+  cells: array(rows, columns, numbers) of mpvar
+
+  sudoku: array(rows, columns) of integer
+  seeds_set: set of integer
+end-declarations
+
+FILE:= "Sudoku_" + n + ".dat" ! File name
+Itr_1:= 500 ! Max_iteration for random seeds
+TIME:= 2 ! Time limit
+
+! domains of decision varoables
+forall(i in rows, j in columns, k in numbers) cells(i, j, k) is_binary
+
+!! Constraints
+! Rows
+forall (i in rows, k in numbers) sum(j in columns) cells(i, j, k) = 1
+
+! Columns
+forall (j in columns, k in numbers) sum(i in rows) cells(i, j, k) = 1
+
+! Each cell has one number
+forall (i in rows, j in columns) sum(k in numbers) cells(i, j, k) = 1
+
+! Blocks
+forall(l in cblock, m in rblock, k in numbers) sum(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n)) cells(i, j, k) = 1
+
+! Initiate the file
+fopen(FILE,F_OUTPUT)
+  writeln('n: ', n)
+fclose(F_OUTPUT)
+
+unique_count:= 0
+
+! setparam("XPRS_VERBOSE", true) ! Uncomment to get detailed MIP output
+setparam("xprs_maxtime", TIME) ! Set the time limit
+RR:= 1
+R:= 1
+
+while(RR <= Itr_1) do
+
+  ! Set random seed for randoml objective function
+  writeln('R: ', R) ! R: randomseed
+  setrandseed(R)
+
+  ! Randomly generate objective function
+  objective:= sum(i in rows, j in columns) integer(round((N*random) + 0.5))*cells(i, j, integer(round((N*random) + 0.5)))
+
+  ave_time:= 0.0
+
+  starttime:= gettime ! Get start time
+  minimize(objective)
+  tt:= gettime - starttime
+  writeln(tt)
+  ave_time += tt
+  fopen("out.txt",F_OUTPUT+F_APPEND)
+    writeln("R: ", R)
+    writeln(tt)
+  fclose(F_OUTPUT)
+
+  ! Print out whether the program was solved
+  if (getprobstat = XPRS_OPT) then
+    writeln("Generated Sudoku matrix.")
+
+    ! ! Generate a random sequence from 1 to N
+    ! number_set:= 1..N
+    ! forall(k in numbers) do
+    !   o:= integer(round((number_set.size*random) + 0.5))
+    !   order(k):= number_set(o)
+    !   number_set -= {number_set(o)}
+    ! end-do
+
+    ! forall(i in rows, j in columns, k in numbers | getsol(cells(i, j, k)) > 0) sudoku(i, j):= order(k)
+    forall(i in rows, j in columns, k in numbers | getsol(cells(i, j, k)) > 0) sudoku(i, j):= k
+
+        ! Print out the result matrix
+    writeln("##################### SOLUTION #####################")
+    forall(i in rows) do
+      forall(j in columns) do
+        write(sudoku(i, j))
+        write(" ")
+      end-do
+      writeln("")
+    end-do
+    writeln("####################################################")
+
+    name:= 'sudoku_' + RR
+    ! Output the result into data file
+    fopen(FILE,F_OUTPUT+F_APPEND)
+      write(name, ': [')
+      forall(i in rows) do
+        forall(j in columns) do
+          write(sudoku(i, j))
+          write(" ")
+        end-do
+        writeln("")
+      end-do
+      writeln(']')
+      writeln('')
+    fclose(F_OUTPUT)
+
+    RR += 1
+    R += 1
+    seeds_set += {RR}
+  else
+    writeln("Sudoku matrix not generated, discard random seed. ")
+    R += 1
+  end-if
+end-do
+RR -= 1
+
+! Output names into data file
+fopen(FILE,F_OUTPUT+F_APPEND)
+  write('random_seeds: [')
+  forall(i in 1..seeds_set.size) do
+    write(seeds_set(i))
+    write(" ")
+  end-do
+  write("]")
+fclose(F_OUTPUT)
+
+! Print out number of different grids
+writeln("Number of matrices generated: ", RR)
+writeln("Time: ", ave_time, "Average Time: ", ave_time/RR)
+
+end-model

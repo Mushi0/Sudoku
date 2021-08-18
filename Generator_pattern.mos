@@ -1,0 +1,113 @@
+model Generator_pattern
+uses "mmxprs", "mmsystem", "python3"
+
+TIME:= 60 ! Time limit
+MAX_ITR:= 500
+
+! Initialize
+declarations
+  n = 4
+  N = integer(n^2)
+  rows = 1..N
+  columns = 1..N
+  numbers = 1..N
+  rblock = 0..integer(n - 1)
+  cblock = 0..integer(n - 1)
+  cells: array(rows, columns, numbers) of mpvar
+  grids = 1..integer(N^2)
+  full_matrix: array(grids) of integer
+  rinit = 1..n
+  cinit = 1..n
+  init: array(rinit, cinit, numbers) of integer
+end-declarations
+
+FILE:= "Sudoku_" + n + ".dat" ! File name
+
+forall(l in rinit, m in cinit) init(l, m, (l - 1)*n + m):= 1
+
+! domains of decision varoables
+forall(i in rows, j in columns, k in numbers) cells(i, j, k) is_binary
+
+!! Constraints
+! Rows
+forall (i in rows, k in numbers) sum(j in columns) cells(i, j, k) = 1
+
+! Columns
+forall (j in columns, k in numbers) sum(i in rows) cells(i, j, k) = 1
+
+! Each cell has one number
+forall (i in rows, j in columns) sum(k in numbers) cells(i, j, k) = 1
+
+! Blocks
+forall(l in cblock, m in rblock, k in numbers) sum(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n)) cells(i, j, k) = 1
+
+! Existint cells
+forall(l in rinit, m in cinit) cells(l, m, (l - 1)*n + m) = 1
+
+! Initiate the file
+fopen(FILE,F_OUTPUT)
+  writeln('n: ', n)
+fclose(F_OUTPUT)
+
+! setparam("XPRS_VERBOSE", true) ! Uncomment to get detailed MIP output
+setparam("xprs_maxtime", TIME) ! Set the time limit
+T:= 1
+ave_time:= 0.0
+
+starttime:= gettime ! Get start time
+minimize(0)
+tt:= gettime - starttime
+ave_time:= (ave_time*(T - 1) + tt)/T
+
+while (getprobstat = XPRS_OPT) do
+  writeln(T)
+  writeln("Generated Sudoku matrix. ")
+
+  ! Not permuted
+  forall(i in rows, j in columns, k in numbers | getsol(cells(i, j, k)) > 0) full_matrix((i - 1)*N + j):= k
+  forall(i in rows, j in columns, k in numbers | i <= n and j <= n and init(i, j, k) > 0) full_matrix((i - 1)*N + j):= k ! patterns
+
+  ! Print out the result matrix -- Sudoku
+  writeln("##################### SOLUTION #####################")
+    forall(g in grids) do
+      write(full_matrix(g), ' ')
+      if (g mod N = 0) then
+        writeln('')
+      end-if
+    end-do
+  writeln("####################################################")
+
+  name:= 'sudoku_' + T
+  ! Output the result into data file
+  fopen(FILE,F_OUTPUT+F_APPEND)
+    write(name, ': [')
+    forall(g in grids) do
+      write(full_matrix(g), ' ')
+      if (g mod N = 0) then
+        writeln('')
+      end-if
+    end-do
+    writeln(']')
+    writeln('')
+  fclose(F_OUTPUT)
+
+  ! uniqueness
+  sum(i in rows, j in columns, k in numbers | full_matrix((i - 1)*N + j) <> k) cells(i, j, k) + sum(i in rows, j in columns, k in numbers | full_matrix((i - 1)*N + j) = k) (1 - cells(i, j, k)) >= 1
+
+  T += 1
+  if (T > 500) then
+    break
+  end-if
+
+  starttime:= gettime ! Get start time
+  minimize(0)
+  tt:= gettime - starttime
+  ave_time:= (ave_time*(T - 1) + tt)/T
+end-do
+T -= 1
+
+! Print out number of different grids
+writeln("Number of matrices generated: ", T)
+writeln("Time: ", ave_time*T, "Average Time: ", ave_time)
+
+end-model

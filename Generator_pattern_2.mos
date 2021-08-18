@@ -1,0 +1,142 @@
+model Generator_pattern_2
+uses "mmxprs", "mmsystem", "python3"
+
+! Initialize
+declarations
+  n = 3
+  N = integer(n^2)
+  rows = 1..N
+  columns = 1..N
+  sudoku: array(rows, columns) of integer
+  row_2, row_3, row_4, row_5, row_6, row_7, row_8, row_9: set of integer
+end-declarations
+
+FILE:= "Sudoku_" + n + "_Partial.dat" ! File name
+counts:= 0
+
+! Initiate the file
+fopen(FILE,F_OUTPUT)
+  writeln('n: ', n)
+fclose(F_OUTPUT)
+
+forall(i in columns) do
+  forall(k in columns) row_2 += {k}
+  block_1:= (i - 1) div n
+  forall(k in (block_1*n + 1)..(block_1 + 1)*n) row_2 -= {k}
+  writeln("Row2_size: ", row_2.size)
+  forall(j in 1..row_2.size) do
+    forall(k in columns) row_3 += {k}
+    jj:= row_2(j)
+    block_2:= (jj - 1) div n
+    forall(k in (block_1*n + 1)..(block_1 + 1)*n) row_3 -= {k}
+    forall(k in (block_2*n + 1)..(block_2 + 1)*n) row_3 -= {k}
+    writeln("Row3_size: ", row_3.size)
+    forall(l in 1..row_3.size) do
+      forall(k in columns) row_4 += {k}
+      row_4 -= {i}
+      row_4 -= {jj}
+      ll:= row_3(l)
+      row_4 -= {ll}
+      writeln("Row4_size: ", row_4.size)
+      forall(m in 1..row_4.size) do
+        forall(k in columns) row_5 += {k}
+        row_5 -= {i}
+        row_5 -= {jj}
+        row_5 -= {ll}
+        mm:= row_4(m)
+        block_3:= (mm - 1) div n
+        forall(k in (block_3*n + 1)..(block_3 + 1)*n) row_5 -= {k}
+        writeln("Row5_size: ", row_5.size)
+        forall(o in 1..row_5.size) do
+          forall(k in columns) row_6 += {k}
+          row_6 -= {i}
+          row_6 -= {jj}
+          row_6 -= {ll}
+          oo:= row_5(o)
+          block_4:= (oo - 1) div n
+          forall(k in (block_3*n + 1)..(block_3 + 1)*n) row_6 -= {k}
+          forall(k in (block_4*n + 1)..(block_4 + 1)*n) row_6 -= {k}
+          writeln("Row6_size: ", row_6.size)
+          forall(p in 1..row_6.size) do
+            forall(k in columns) row_7 += {k}
+            row_7 -= {i}
+            row_7 -= {jj}
+            row_7 -= {ll}
+            row_7 -= {mm}
+            row_7 -= {oo}
+            pp:= row_6(p)
+            row_7 -= {pp}
+            writeln("Row7_size: ", row_7.size)
+            forall(q in 1..row_7.size) do
+              forall(k in columns) row_8 += {k}
+              row_8 -= {i}
+              row_8 -= {jj}
+              row_8 -= {ll}
+              row_8 -= {mm}
+              row_8 -= {oo}
+              row_8 -= {pp}
+              qq:= row_7(q)
+              row_8 -= {qq}
+              writeln("Row8_size: ", row_8.size)
+              forall(s in 1..row_8.size) do
+                forall(k in columns) row_9 += {k}
+                row_9 -= {i}
+                row_9 -= {jj}
+                row_9 -= {ll}
+                row_9 -= {mm}
+                row_9 -= {oo}
+                row_9 -= {pp}
+                row_9 -= {qq}
+                ss:= row_8(s)
+                row_9 -= {ss}
+                writeln("Row9_size: ", row_9.size)
+
+                forall(r in rows, c in columns) sudoku(r, c):= 0
+                sudoku(1, i):= 1
+                sudoku(2, jj):= 1
+                sudoku(3, ll):= 1
+                sudoku(4, mm):= 1
+                sudoku(5, oo):= 1
+                sudoku(6, pp):= 1
+                sudoku(7, qq):= 1
+                sudoku(8, ss):= 1
+                sudoku(9, row_9(1)):= 1
+
+                ! ! Print out the original sudoku matrix
+                ! writeln("##################### SUDOKU# #####################")
+                ! forall(r in rows) do
+                !   forall(c in columns) do
+                !     write(sudoku(r, c))
+                !     write(" ")
+                !   end-do
+                !   writeln("")
+                ! end-do
+                ! writeln("####################################################")
+                counts += 1
+
+                name:= 'sudoku_' + counts
+                ! Output the result into data file
+                fopen(FILE,F_OUTPUT+F_APPEND)
+                  write(name, ': [')
+                  forall(r in rows) do
+                    forall(c in columns) do
+                      write(sudoku(r, c))
+                      write(" ")
+                    end-do
+                    writeln("")
+                  end-do
+                  writeln(']')
+                  writeln('')
+                fclose(F_OUTPUT)
+              end-do
+            end-do
+          end-do
+        end-do
+      end-do
+    end-do
+  end-do
+end-do
+
+writeln("Count: ", counts)
+
+end-model

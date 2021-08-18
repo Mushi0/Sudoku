@@ -1,0 +1,204 @@
+model Generator
+uses "mmxprs", "mmsystem", "python3"
+
+! Initialize
+declarations
+  n = 5
+  N = integer(n^2)
+  rows = 1..N
+  columns = 1..N
+  numbers = 1..N
+  rblock = 0..integer(n - 1)
+  cblock = 0..integer(n - 1)
+  cells: array(rows, columns, numbers) of mpvar
+
+  sudoku: array(rows, columns) of integer
+  sudoku_original: array(rows, columns) of integer
+  Exist: array(rows, columns) of linctr
+  Uniqueness: linctr
+  row_clues: array(rows) of integer
+  column_clues: array(columns) of integer
+  block_clues: array(rblock, cblock) of integer
+  remaining: set of integer
+  names: set of string
+  ! number_set: set of integer
+end-declarations
+
+Min:= 11 ! Minimum clues in a row, column or a block
+FILE_READ:= "Sudoku_" + n + ".dat"
+FILE:= "Sudoku_" + n + "_" + Min + ".dat" ! File names
+Itr_1:= 500
+Itr_2:= 20 ! Max_iteration for random seeds
+TIME:= 10 ! Time limit
+
+! domains of decision varoables
+forall(i in rows, j in columns, k in numbers) cells(i, j, k) is_binary
+
+!! Constraints
+! Rows
+forall (i in rows, k in numbers) sum(j in columns) cells(i, j, k) = 1
+
+! Columns
+forall (j in columns, k in numbers) sum(i in rows) cells(i, j, k) = 1
+
+! Each cell has one number
+forall (i in rows, j in columns) sum(k in numbers) cells(i, j, k) = 1
+
+! Blocks
+forall(l in cblock, m in rblock, k in numbers) sum(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n)) cells(i, j, k) = 1
+
+! Initiate the file
+fopen(FILE,F_OUTPUT)
+  writeln('n: ', n)
+fclose(F_OUTPUT)
+
+unique_count:= 0
+unknown:= 0
+
+! setparam("XPRS_VERBOSE", true) ! Uncomment to get detailed MIP output
+setparam("xprs_maxtime", TIME) ! Set the time limit
+
+forall(R in 1..Itr_1) do
+  writeln('R: ', R)
+  ! Read Sudoku matrix
+  name:= "sudoku_" + R
+  initialisations from FILE_READ
+    sudoku as name
+  end-initialisations
+  sudoku_original:= sudoku
+
+  ! ! Print out the result matrix
+  ! writeln("##################### SOLUTION #####################")
+  ! forall(i in rows) do
+  !   forall(j in columns, k in numbers | getsol(cells(i, j, k)) > 0) do
+  !     write(k)
+  !     write(" ")
+  !   end-do
+  !   writeln("")
+  ! end-do
+  ! writeln("####################################################")
+
+  ! ! Generate a random sequence from 1 to N
+  ! number_set:= 1..N
+  ! forall(k in numbers) do
+  !   o:= integer(round((number_set.size*random) + 0.5))
+  !   order(k):= number_set(o)
+  !   number_set -= {number_set(o)}
+  ! end-do
+  ! forall(i in rows, j in columns) sudoku(i, j):= order(sudoku(i, j))
+
+  !! Constraints
+  ! uniqueness
+  Uniqueness:= sum(i in rows, j in columns, k in numbers | sudoku_original(i, j) <> k) cells(i, j, k) + sum(i in rows, j in columns, k in numbers | sudoku_original(i, j) = k) (1 - cells(i, j, k)) >= 1
+
+  forall(r in 1..Itr_2) do
+    ! Set sudoku matrix, remaining
+    sudoku:= sudoku_original
+    remaining:= 1..integer(N^2)
+
+    ! Set existing clues in each row, clumn and block
+    forall(i in rows) row_clues(i):= N
+    forall(j in columns) column_clues(j):= N
+    forall(l in cblock, m in rblock) block_clues(l, m):= N
+
+    ! Set random seed for randomly remiving
+    writeln('r: ', r) ! r: randomseed
+    setrandseed(r)
+
+    ! Iterations
+    while(remaining <> {}) do
+      ! Randomly choose an index from the set of ramining cells
+      x:= integer(round((remaining.size*random) + 0.5))
+      o:= (remaining(x) - 1) div N + 1 ! row index
+      p:= remaining(x) mod N ! column index
+      if (p = 0) then
+        p:= N
+      end-if
+      l:= (o - 1) div n ! rblock
+      m:= (p - 1) div n ! cblock
+      ! writeln('(', o, ', ', p, ')')
+
+      ! Remove the cell and reset the record
+      sudoku(o, p):= 0
+      row_clues(o):= row_clues(o) - 1
+      column_clues(p):= column_clues(p) - 1
+      block_clues(l, m):= block_clues(l, m) - 1
+
+      ! Remove the cell from the set
+      remaining:= remaining - {remaining(x)}
+
+      ! Remove the row, column or block which reaches the minimum remaining cells
+      if (row_clues(o) <= Min) then
+        forall(j in columns) remaining:= remaining - {(o - 1)*N + j}
+      end-if
+      if (column_clues(p) <= Min) then
+        forall(i in rows) remaining:= remaining - {(i - 1)*N + p}
+      end-if
+      if (block_clues(l, m) <= Min) then
+        forall(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n)) remaining:= remaining - {(i - 1)*N + j}
+      end-if
+    end-do
+
+    ! writeln("##################### REMAINING #####################")
+    ! forall(i in rows) do
+    !   forall(j in columns) do
+    !     write(sudoku(i, j))
+    !     write(" ")
+    !   end-do
+    !   writeln("")
+    ! end-do
+    ! writeln("####################################################")
+
+    ! Existed cells
+    forall(i in rows, j in columns | sudoku(i, j) <> 0) Exist(i, j):= cells(i, j, sudoku_original(i, j)) = 1
+
+    ! Objective function = 0
+    minimize(0)
+
+    ! Print out whether the program was solved
+    if (getprobstat = XPRS_OPT) then
+      writeln("Solved, the solution is NOT UNIQUE. ")
+    elif (getprobstat = XPRS_UNF) then
+      writeln("Time out. ")
+      unknown += 1
+    else
+      writeln("Not solved to optimality, the solution is UNIQUE. ")
+      unique_count += 1
+
+      name:= 'sudoku_' + R + '_' + r
+      ! Output the result into data file
+      fopen(FILE,F_OUTPUT+F_APPEND)
+        write(name, ': [')
+        forall(i in rows, j in columns) do
+          if (sudoku(i, j) > 0) then
+            writeln('(', i, ' ', j, ') ', sudoku(i, j))
+          end-if
+        end-do
+        writeln(']')
+        writeln('')
+      fclose(F_OUTPUT)
+      ! Update names
+      names += {name}
+    end-if
+
+    ! Reset existig constraints
+    forall(i in rows, j in columns | (sudoku(i, j)) > 0) Exist(i, j):= cells(i, j, sudoku_original(i, j)) is_binary
+  end-do
+
+  ! Reset uniqueness constraint
+  Uniqueness:= cells(1, 1, 1) is_binary
+end-do
+
+! Output names into data file
+fopen(FILE,F_OUTPUT+F_APPEND)
+  write('names: [')
+  forall(nm in names) write('"', nm, '" ')
+  write("]")
+fclose(F_OUTPUT)
+
+! Print out number of uniquely solvable puzzles
+writeln('Unique_count: ', unique_count)
+writeln('Percentage: ', unique_count/(Itr_1*Itr_2)*100, '%')
+writeln('Time out and unknown: ', unknown)
+
+end-model

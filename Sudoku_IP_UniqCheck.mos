@@ -1,0 +1,71 @@
+model Sudoku_IP_UniqCheck
+uses "mmxprs"
+
+FILE:= "Sudoku.dat"
+SOL:= "Solution.dat"
+
+! Initialize n
+declarations
+  n: integer
+end-declarations
+
+initializations from SOL
+    n
+end-initializations
+
+N:= integer(n^2)
+
+! Initialize other arrays
+declarations
+  rows = 1..N
+  columns = 1..N
+  numbers = 1..N
+  rblock = 0..integer(n - 1)
+  cblock = 0..integer(n - 1)
+  sudoku: dynamic array(rows, columns) of integer ! use dynamic array to read sparse array
+  solution: array(rows, columns) of integer
+  cells: array(rows, columns, numbers) of mpvar
+end-declarations
+
+initializations from SOL
+    solution
+end-initializations
+
+initializations from FILE
+    sudoku
+end-initializations
+
+! Domains of decision varoables
+forall(i in rows, j in columns, k in numbers) cells(i, j, k) is_binary
+
+!! Constraints
+! Existed cells
+forall(i in rows, j in columns | exists(sudoku(i, j))) cells(i, j, sudoku(i, j)) = 1 ! use exists() so that only the initial clues are read
+
+! Rows
+forall (i in rows, k in numbers) sum(j in columns) cells(i, j, k) = 1
+
+! Columns
+forall (j in columns, k in numbers) sum(i in rows) cells(i, j, k) = 1
+
+! Each cell has one number
+forall (i in rows, j in columns) sum(k in numbers) cells(i, j, k) = 1
+
+! Blocks
+forall(l in cblock, m in rblock, k in numbers) sum(i in (l*n + 1)..(l*n + n), j in (m*n + 1)..(m*n + n)) cells(i, j, k) = 1
+
+! uniqueness
+sum(i in rows, j in columns, k in numbers | solution(i, j) <> k) cells(i, j, k) + sum(i in rows, j in columns, k in numbers | solution(i, j) = k) (1 - cells(i, j, k)) >= 1
+
+! Objective function = 0
+! setparam("XPRS_VERBOSE", true) ! Uncomment to get detailed MIP output
+minimize(0)
+
+! Print out whether the program was solved
+if (getprobstat = XPRS_OPT) then
+  writeln("Solved, the solution is NOT UNIQUE. ")
+else
+  writeln("Not solved to optimality, the solution is UNIQUE. ")
+end-if
+
+end-model
